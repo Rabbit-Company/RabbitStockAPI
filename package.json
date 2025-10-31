@@ -1,0 +1,19 @@
+{
+	"name": "rabbitstockapi",
+	"module": "src/index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"start": "bun src/index.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@rabbit-company/web": "^0.14.0",
+		"@rabbit-company/web-middleware": "^0.14.0"
+	}
+}
