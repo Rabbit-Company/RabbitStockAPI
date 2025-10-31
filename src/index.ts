@@ -87,7 +87,7 @@ async function initializeApp(): Promise<void> {
 		setInterval(updateStockPrices, 10000);
 
 		Logger.info("RabbitStockAPI started successfully");
-		Logger.info("Server running on http://localhost:3000");
+		Logger.info(`Server running on http://localhost:${port}`);
 		Logger.info("Available endpoints:");
 		Logger.info("	GET /          - Health check");
 		Logger.info("	GET /stocks    - Stock data");

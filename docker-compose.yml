@@ -6,7 +6,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - LOGGER_LEVEL=3
+      - LOGGER_LEVEL
       - TRADING212_API_KEY
       - TRADING212_API_SECRET
     healthcheck:
