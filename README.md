@@ -24,9 +24,32 @@ A high-performance stock API built with Bun that fetches real-time stock data fr
 Create a `.env` file in your project root:
 
 ```toml
-TRADING212_API_KEY=your_api_key_here
-TRADING212_API_SECRET=your_api_secret_here
+# Server Configuration
+SERVER_HOST="0.0.0.0"
+SERVER_PORT=3000
+
+# Trading212 API Credentials
+# Get these from your Trading212 account dashboard
+TRADING212_API_KEY=your_trading212_api_key_here
+TRADING212_API_SECRET=your_trading212_api_secret_here
+
+# Trading212 API Update Interval (in milliseconds)
+# Minimum: 5000 (5 seconds) due to Trading212 API limits
+# Default: 10000
+UPDATE_INTERVAL=10000
+
+# Logging Configuration
+# 0 = ERROR, 1 = WARN, 2 = AUDIT, 3 = INFO, 4 = HTTP, 5 = DEBUG, 6 = VERBOSE, 7 = SILLY
+# Default: 3 (INFO) - Recommended: 3 for production, 5 for development
 LOGGER_LEVEL=3
+
+# Proxy Configuration
+# Important: Set this to match your deployment environment to prevent IP spoofing
+# Options: "aws" (AWS ELB/ALB), "azure" (Azure), "cloudflare" (Cloudflare),
+#          "gcp" (Google Cloud), "nginx" (Nginx), "vercel" (Vercel),
+#          "direct" (no proxy/development), "development" (dev with proxy headers)
+# Default: "direct"
+PROXY=direct
 ```
 
 ### Running with Docker Compose
@@ -40,9 +63,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - LOGGER_LEVEL
       - TRADING212_API_KEY
       - TRADING212_API_SECRET
+      - UPDATE_INTERVAL
+      - LOGGER_LEVEL
+      - PROXY
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s
@@ -65,7 +90,9 @@ docker run -d \
   -p 3000:3000 \
   -e TRADING212_API_KEY=your_key \
   -e TRADING212_API_SECRET=your_secret \
-  -e LOGGER_LEVEL=3 \
+	-e UPDATE_INTERVAL=10000 \
+	-e LOGGER_LEVEL=3 \
+	-e PROXY=direct \
   rabbitcompany/rabbitstockapi:latest
 ```
 
@@ -80,13 +107,14 @@ Health Check
 	"message": "RabbitStockAPI is running",
 	"stocksCount": 16,
 	"instrumentsCount": 12811,
+	"updateInterval": "10000ms",
 	"lastUpdate": "2025-10-31T13:49:16.007Z"
 }
 ```
 
-### GET `/stocks`
+### GET `/prices`
 
-Stock Data
+Stock prices data
 
 ```json
 {

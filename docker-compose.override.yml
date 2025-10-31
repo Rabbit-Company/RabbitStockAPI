@@ -7,9 +7,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - LOGGER_LEVEL
       - TRADING212_API_KEY
       - TRADING212_API_SECRET
+      - UPDATE_INTERVAL
+      - LOGGER_LEVEL
+      - PROXY
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s

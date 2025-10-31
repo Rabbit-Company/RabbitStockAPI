@@ -5,7 +5,8 @@ import { Web } from "@rabbit-company/web";
 import { Logger } from "./logger";
 import { cors } from "@rabbit-company/web-middleware/cors";
 import { logger } from "@rabbit-company/web-middleware/logger";
-import { Algorithm, rateLimit } from "@rabbit-company/web-middleware/rate-limit";
+import { IP_EXTRACTION_PRESETS, ipExtract } from "@rabbit-company/web-middleware/ip-extract";
+import type { CloudProvider } from "./types";
 
 const { apiKey, apiSecret } = validateEnvironment();
 const config = {
@@ -16,6 +17,13 @@ const config = {
 
 const host = process.env.SERVER_HOST || "0.0.0.0";
 const port = parseInt(process.env.SERVER_PORT || "3000") || 3000;
+const proxy = Object.keys(IP_EXTRACTION_PRESETS).includes(process.env.PROXY || "direct") ? (process.env.PROXY as CloudProvider) : "direct";
+const updateInterval = parseInt(process.env.UPDATE_INTERVAL || "10000") || 10000;
+const actualInterval = Math.max(updateInterval, 5000);
+
+if (updateInterval < 5000) {
+	Logger.warn(`Update interval too low: ${updateInterval}ms. Using minimum 5000ms for Trading212 API compliance`);
+}
 
 const tradingClient = new Trading212Client(config);
 const stockCache = new StockCache();
@@ -35,25 +43,26 @@ app.use(
 	})
 );
 
-app.use(
-	rateLimit({
-		algorithm: Algorithm.FIXED_WINDOW,
-		windowMs: 10 * 1000, // 10 seconds
-		max: 10,
-	})
-);
+app.use(ipExtract(proxy));
 
 app.get("/", (c) => {
-	return c.json({
-		message: "RabbitStockAPI is running",
-		stocksCount: stockCache.getStockCount(),
-		instrumentsCount: stockCache.getInstrumentCount(),
-		lastUpdate: new Date().toISOString(),
-	});
+	return c.json(
+		{
+			message: "RabbitStockAPI is running",
+			stocksCount: stockCache.getStockCount(),
+			instrumentsCount: stockCache.getInstrumentCount(),
+			updateInterval: `${actualInterval}ms`,
+			lastUpdate: new Date().toISOString(),
+		},
+		200,
+		{ "Cache-Control": `public, s-maxage=${Math.floor(actualInterval / 2 / 1000)}, max-age=0, stale-while-revalidate=300, stale-if-error=86400` }
+	);
 });
 
-app.get("/stocks", (c) => {
-	return c.json(stockCache.getStocks());
+app.get("/prices", (c) => {
+	return c.json(stockCache.getStocks(), 200, {
+		"Cache-Control": `public, s-maxage=${Math.floor(actualInterval / 2 / 1000)}, max-age=0, stale-while-revalidate=300, stale-if-error=86400`,
+	});
 });
 
 async function fetchInstruments(): Promise<void> {
@@ -84,10 +93,12 @@ async function initializeApp(): Promise<void> {
 		await fetchInstruments();
 		await updateStockPrices();
 
-		setInterval(updateStockPrices, 10000);
+		const actualInterval = Math.max(updateInterval, 5000);
+		setInterval(updateStockPrices, actualInterval);
 
 		Logger.info("RabbitStockAPI started successfully");
-		Logger.info(`Server running on http://localhost:${port}`);
+		Logger.info(`Server running on http://${host}:${port}`);
+		Logger.info(`Stock updates every ${actualInterval}ms (Trading212 compliant)`);
 		Logger.info("Available endpoints:");
 		Logger.info("	GET /          - Health check");
 		Logger.info("	GET /stocks    - Stock data");
