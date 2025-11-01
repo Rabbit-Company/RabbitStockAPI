@@ -1,3 +1,4 @@
+import { server } from ".";
 import type { Instrument, PortfolioItem, StockData, StocksResponse } from "./types";
 import { extractSymbol } from "./utils";
 
@@ -25,6 +26,8 @@ export class StockCache {
 				currency,
 				updated: timestamp,
 			};
+
+			server.publish(symbol, JSON.stringify({ event: "update", symbol: symbol, data: newStocks[symbol] }));
 		});
 
 		this.stocks = newStocks;
@@ -32,6 +35,10 @@ export class StockCache {
 
 	getStocks(): StocksResponse {
 		return { stocks: { ...this.stocks } };
+	}
+
+	getSymbols(): string[] {
+		return Object.keys(this.stocks);
 	}
 
 	getStockCount(): number {

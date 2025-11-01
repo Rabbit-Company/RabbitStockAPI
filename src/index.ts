@@ -50,13 +50,58 @@ app.websocket({
 	idleTimeout: 120,
 	maxPayloadLength: 1024 * 1024, // 1 MB
 	open(ws) {
-		ws.subscribe("prices");
+		ws.send(
+			JSON.stringify({
+				event: "connected",
+				message: "Welcome! Use { action: 'subscribe', symbols: ['UBNT', 'NET'] } to receive price updates for specified symbols.",
+			})
+		);
 	},
-	message(ws) {
-		ws.close(1008, "Just listen to prices and don't talk back, or I'll yeet you out of this WebSocket again!");
+	message(ws, message) {
+		if (typeof message !== "string") return;
+
+		let data: any;
+		try {
+			data = JSON.parse(message);
+		} catch {
+			ws.send(JSON.stringify({ event: "error", message: "Invalid JSON" }));
+			return;
+		}
+
+		if (!data || typeof data.action !== "string") {
+			ws.send(JSON.stringify({ event: "error", message: "Missing 'action' field" }));
+			return;
+		}
+
+		const validSymbols = stockCache.getSymbols();
+		const isValidSymbol = (s: any) => typeof s === "string" && validSymbols.includes(s);
+
+		if (data.action === "ping") {
+			ws.send(JSON.stringify({ event: "pong", timestamp: Date.now() }));
+		} else if (data.action === "subscribe") {
+			if (!Array.isArray(data.symbols)) {
+				ws.send(JSON.stringify({ event: "error", message: "Expected 'symbols' array" }));
+				return;
+			}
+			const symbols: string[] = data.symbols.filter(isValidSymbol);
+			symbols.forEach((symbol) => ws.subscribe(symbol));
+
+			ws.send(JSON.stringify({ event: "subscribed", symbols }));
+		} else if (data.action === "unsubscribe") {
+			if (!Array.isArray(data.symbols)) {
+				ws.send(JSON.stringify({ event: "error", message: "Expected 'symbols' array" }));
+				return;
+			}
+			const symbols: string[] = data.symbols.filter(isValidSymbol);
+			symbols.forEach((symbol) => ws.unsubscribe(symbol));
+
+			ws.send(JSON.stringify({ event: "unsubscribed", symbols }));
+		} else {
+			ws.send(JSON.stringify({ event: "error", message: "Unknown action" }));
+		}
 	},
 	close(ws) {
-		ws.unsubscribe("prices");
+		ws.send?.(JSON.stringify({ event: "disconnected", message: "Connection closed." }));
 	},
 });
 
@@ -83,7 +128,7 @@ app.get("/", (c) => {
 			},
 			websocketStats: {
 				connections: server.pendingWebSockets,
-				subscribers: server.subscriberCount("prices"),
+				subscribers: Object.fromEntries(stockCache.getSymbols().map((symbol) => [symbol, server.subscriberCount(symbol)])),
 			},
 			lastUpdate: new Date().toISOString(),
 		},
@@ -115,7 +160,6 @@ async function updateStockPrices(): Promise<void> {
 		Logger.debug("Fetching portfolio data...");
 		const portfolio = await tradingClient.getPortfolio();
 		stockCache.updateStocks(portfolio);
-		server.publish("prices", JSON.stringify(stockCache.getStocks()));
 		Logger.debug(`Updated ${Object.keys(stockCache.getStocks().stocks).length} stock prices`);
 	} catch (error: any) {
 		Logger.error("Error updating stock prices", error);
@@ -143,7 +187,7 @@ async function initializeApp(): Promise<void> {
 	}
 }
 
-const server = await app.listen({
+export const server = await app.listen({
 	hostname: host,
 	port: port,
 });

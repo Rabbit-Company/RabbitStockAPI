@@ -106,10 +106,10 @@ Health Check
 ```json
 {
 	"program": "RabbitStockAPI",
-	"version": "2.0.0",
+	"version": "4.0.0",
 	"sourceCode": "https://github.com/Rabbit-Company/RabbitStockAPI",
 	"monitorStats": {
-		"stocksCount": 16,
+		"stocksCount": 22,
 		"instrumentsCount": 12810,
 		"updateInterval": "10000ms"
 	},
@@ -117,10 +117,33 @@ Health Check
 		"pendingRequests": 1
 	},
 	"websocketStats": {
-		"connections": 0,
-		"subscribers": 0
+		"connections": 2,
+		"subscribers": {
+			"VOW3d": 0,
+			"NET": 2,
+			"MSFT": 0,
+			"ASMLa": 0,
+			"V": 1,
+			"UBNT": 2,
+			"SMSDl": 0,
+			"FB": 0,
+			"DAId": 0,
+			"TSLA": 1,
+			"AMZN": 0,
+			"AMD": 1,
+			"AAPL": 0,
+			"GOOGL": 0,
+			"WISEl": 0,
+			"NVDA": 0,
+			"MMM": 0,
+			"OXLC": 0,
+			"STX": 1,
+			"GGRGl": 0,
+			"CCIV": 0,
+			"MO": 0
+		}
 	},
-	"lastUpdate": "2025-11-01T10:43:26.025Z"
+	"lastUpdate": "2025-11-01T22:38:14.552Z"
 }
 ```
 
@@ -164,47 +187,129 @@ Stock prices data (REST API)
 
 Real-time stock price streaming via WebSocket
 
-Connect to `ws://your-server:3000/ws` to receive live price updates.
+#### Connect
 
-#### Connection Example
+`ws://your-server:3000/ws`
 
-```js
-// Connect to WebSocket
-const ws = new WebSocket("ws://localhost:3000/ws");
+#### Welcome message (on open)
 
-ws.onopen = () => {
-	console.log("Connected to RabbitStockAPI WebSocket");
-};
-
-ws.onmessage = (event) => {
-	const data = JSON.parse(event.data);
-	console.log("Price update received:", data);
-};
-
-ws.onclose = () => {
-	console.log("Disconnected from RabbitStockAPI WebSocket");
-};
-```
-
-#### WebSocket Message Format
-
-When stock prices update, you'll receive:
+When you connect, the server will send a welcome message:
 
 ```json
 {
-	"stocks": {
-		"VOW3d": {
-			"price": 89.93,
-			"currency": "EUR",
-			"updated": 1761918633611
-		},
-		"NET": {
-			"price": 241.77,
-			"currency": "USD",
-			"updated": 1761918633611
-		}
+	"event": "connected",
+	"message": "Welcome! Use { action: 'subscribe', symbols: ['UBNT', 'NET'] } to receive price updates for specified symbols."
+}
+```
+
+#### Supported client actions
+
+Clients send JSON messages to the server to control subscriptions or check health:
+
+##### 1) Subscribe
+
+Client to Server
+
+```json
+{
+	"action": "subscribe",
+	"symbols": ["UBNT", "NET"]
+}
+```
+
+Server to Client response (successful subscribe):
+
+```json
+{
+	"event": "subscribed",
+	"symbols": ["UBNT", "NET"]
+}
+```
+
+If any supplied symbols are invalid (unknown), they are filtered out of the symbols list in the response. If symbols is missing or not an array, server returns an error object.
+
+##### 2) Unsubscribe
+
+Client to Server
+
+```json
+{
+	"action": "unsubscribe",
+	"symbols": ["NET"]
+}
+```
+
+Server to Client response (successful unsubscribe):
+
+```json
+{
+	"event": "unsubscribed",
+	"symbols": ["NET"]
+}
+```
+
+##### 3) Ping (health check)
+
+Client to Server
+
+```json
+{ "action": "ping" }
+```
+
+Server to Client
+
+```json
+{ "event": "pong", "timestamp": 1003104000000 }
+```
+
+##### Error responses
+
+If the message is invalid JSON or missing required fields, the server replies:
+
+```json
+{ "event": "error", "message": "Invalid JSON" }
+{ "event": "error", "message": "Missing 'action' field" }
+{ "event": "error", "message": "Expected 'symbols' array" }
+{ "event": "error", "message": "Unknown action" }
+```
+
+On close, the server may send:
+
+```json
+{ "event": "disconnected", "message": "Connection closed." }
+```
+
+#### Update messages (server to subscribers)
+
+The server publishes updates per symbol using the event: "update" envelope. Example per-symbol publish:
+
+```json
+{
+	"event": "update",
+	"symbol": "UBNT",
+	"data": {
+		"price": 785.97,
+		"currency": "USD",
+		"updated": 1003104000000
 	}
 }
 ```
 
-**Note**: The WebSocket connection is read-only. Any messages sent to the server will result in immediate disconnection with the message: "Just listen to prices and don't talk back, or I'll yeet you out of this WebSocket again!"
+#### Example WebSocket client
+
+```js
+const ws = new WebSocket("ws://localhost:3000/ws");
+
+ws.onopen = () => {
+	console.log("Connected to RabbitStockAPI WebSocket");
+	ws.send(JSON.stringify({ action: "subscribe", symbols: ["UBNT", "NET"] }));
+};
+
+ws.onmessage = (event) => {
+	const data = JSON.parse(event.data);
+	console.log("WS message:", data);
+	// handle event: "connected", "subscribed", "update", "error", "pong", ...
+};
+
+ws.onclose = () => console.log("Disconnected from RabbitStockAPI");
+```

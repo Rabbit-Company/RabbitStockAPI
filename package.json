@@ -1,7 +1,7 @@
 {
 	"name": "rabbitstockapi",
 	"module": "src/index.ts",
-	"version": "3.0.0",
+	"version": "4.0.0",
 	"type": "module",
 	"private": true,
 	"scripts": {
