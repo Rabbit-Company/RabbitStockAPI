@@ -7,6 +7,7 @@ import { cors } from "@rabbit-company/web-middleware/cors";
 import { logger } from "@rabbit-company/web-middleware/logger";
 import { IP_EXTRACTION_PRESETS, ipExtract } from "@rabbit-company/web-middleware/ip-extract";
 import type { CloudProvider } from "./types";
+import pkg from "../package.json" with { type: "json" };
 
 const { apiKey, apiSecret } = validateEnvironment();
 const config = {
@@ -45,13 +46,45 @@ app.use(
 
 app.use(ipExtract(proxy));
 
+app.websocket({
+	idleTimeout: 120,
+	maxPayloadLength: 1024 * 1024, // 1 MB
+	open(ws) {
+		ws.subscribe("prices");
+	},
+	message(ws) {
+		ws.close(1008, "Just listen to prices and don't talk back, or I'll yeet you out of this WebSocket again!");
+	},
+	close(ws) {
+		ws.unsubscribe("prices");
+	},
+});
+
+app.get("/ws", (ctx) => {
+	if (ctx.req.headers.get("upgrade") === "websocket") {
+		return new Response(null, { status: 101 });
+	}
+	return ctx.text("Use WebSocket protocol to connect");
+});
+
 app.get("/", (c) => {
 	return c.json(
 		{
-			message: "RabbitStockAPI is running",
-			stocksCount: stockCache.getStockCount(),
-			instrumentsCount: stockCache.getInstrumentCount(),
-			updateInterval: `${actualInterval}ms`,
+			program: "RabbitStockAPI",
+			version: pkg.version,
+			sourceCode: "https://github.com/Rabbit-Company/RabbitStockAPI",
+			monitorStats: {
+				stocksCount: stockCache.getStockCount(),
+				instrumentsCount: stockCache.getInstrumentCount(),
+				updateInterval: `${actualInterval}ms`,
+			},
+			httpStats: {
+				pendingRequests: server.pendingRequests,
+			},
+			websocketStats: {
+				connections: server.pendingWebSockets,
+				subscribers: server.subscriberCount("prices"),
+			},
 			lastUpdate: new Date().toISOString(),
 		},
 		200,
@@ -82,6 +115,7 @@ async function updateStockPrices(): Promise<void> {
 		Logger.debug("Fetching portfolio data...");
 		const portfolio = await tradingClient.getPortfolio();
 		stockCache.updateStocks(portfolio);
+		server.publish("prices", JSON.stringify(stockCache.getStocks()));
 		Logger.debug(`Updated ${Object.keys(stockCache.getStocks().stocks).length} stock prices`);
 	} catch (error: any) {
 		Logger.error("Error updating stock prices", error);
@@ -100,15 +134,16 @@ async function initializeApp(): Promise<void> {
 		Logger.info(`Server running on http://${host}:${port}`);
 		Logger.info(`Stock updates every ${actualInterval}ms (Trading212 compliant)`);
 		Logger.info("Available endpoints:");
-		Logger.info("	GET /          - Health check");
-		Logger.info("	GET /stocks    - Stock data");
+		Logger.info("	GET /          - Health check and stats");
+		Logger.info("	GET /prices    - Stock price data");
+		Logger.info("	GET /ws        - WebSocket connection");
 	} catch (error: any) {
 		Logger.error("Failed to initialize application", error);
 		process.exit(1);
 	}
 }
 
-app.listen({
+const server = await app.listen({
 	hostname: host,
 	port: port,
 });

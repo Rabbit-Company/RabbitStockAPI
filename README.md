@@ -1,11 +1,12 @@
 # RabbitStockAPI 🐰📈
 
-A high-performance stock API built with Bun that fetches real-time stock data from Trading212 and serves it through a clean REST API.
+A high-performance stock API built with Bun that fetches real-time stock data from Trading212 and serves it through both REST API and WebSocket connections.
 
 ## Features
 
 - 🚀 Blazing Fast - Built with Bun for optimal performance
 - 📊 Real-time Data - Automatically updates stock prices every 10 seconds
+- 🔌 WebSocket Support - Live streaming of price updates via WebSocket
 - 🔐 Secure - Proper authentication with Trading212 API
 - 🐳 Docker Ready - Easy deployment with Docker and Docker Compose
 - 🏥 Health Checks - Built-in monitoring and health endpoints
@@ -104,17 +105,28 @@ Health Check
 
 ```json
 {
-	"message": "RabbitStockAPI is running",
-	"stocksCount": 16,
-	"instrumentsCount": 12811,
-	"updateInterval": "10000ms",
-	"lastUpdate": "2025-10-31T13:49:16.007Z"
+	"program": "RabbitStockAPI",
+	"version": "2.0.0",
+	"sourceCode": "https://github.com/Rabbit-Company/RabbitStockAPI",
+	"monitorStats": {
+		"stocksCount": 16,
+		"instrumentsCount": 12810,
+		"updateInterval": "10000ms"
+	},
+	"httpStats": {
+		"pendingRequests": 1
+	},
+	"websocketStats": {
+		"connections": 0,
+		"subscribers": 0
+	},
+	"lastUpdate": "2025-11-01T10:43:26.025Z"
 }
 ```
 
 ### GET `/prices`
 
-Stock prices data
+Stock prices data (REST API)
 
 ```json
 {
@@ -147,3 +159,52 @@ Stock prices data
 	}
 }
 ```
+
+### WebSocket `/ws`
+
+Real-time stock price streaming via WebSocket
+
+Connect to `ws://your-server:3000/ws` to receive live price updates.
+
+#### Connection Example
+
+```js
+// Connect to WebSocket
+const ws = new WebSocket("ws://localhost:3000/ws");
+
+ws.onopen = () => {
+	console.log("Connected to RabbitStockAPI WebSocket");
+};
+
+ws.onmessage = (event) => {
+	const data = JSON.parse(event.data);
+	console.log("Price update received:", data);
+};
+
+ws.onclose = () => {
+	console.log("Disconnected from RabbitStockAPI WebSocket");
+};
+```
+
+#### WebSocket Message Format
+
+When stock prices update, you'll receive:
+
+```json
+{
+	"stocks": {
+		"VOW3d": {
+			"price": 89.93,
+			"currency": "EUR",
+			"updated": 1761918633611
+		},
+		"NET": {
+			"price": 241.77,
+			"currency": "USD",
+			"updated": 1761918633611
+		}
+	}
+}
+```
+
+**Note**: The WebSocket connection is read-only. Any messages sent to the server will result in immediate disconnection with the message: "Just listen to prices and don't talk back, or I'll yeet you out of this WebSocket again!"
